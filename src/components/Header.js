@@ -13,6 +13,7 @@ import {
   MenuItem,
   Divider,
   ListItemIcon,
+  Button,
 } from "@mui/material";
 import {
   Notifications,
@@ -109,25 +110,36 @@ const Header = ({ forceAuthOnStart = false }) => {
           
           {/* Right side */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <IconButton sx={{ color: 'text.secondary' }}>
-              <Badge badgeContent={2} color="error" size="small">
-                <Notifications />
-              </Badge>
-            </IconButton>
-            
-            <Avatar 
-              sx={{ 
-                bgcolor: 'primary.main',
-                width: 36,
-                height: 36,
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-              onClick={handleAvatarClick}
-            >
-              {initial}
-            </Avatar>
+            {!currentUser && (
+              <Button
+                onClick={handleAvatarClick}
+                variant="contained"
+                >
+                Sign In
+              </Button>
+            )}
+            {currentUser && (
+              <>
+              <IconButton sx={{ color: 'text.secondary' }}>
+                <Badge badgeContent={2} color="error" size="small">
+                  <Notifications />
+                </Badge>
+              </IconButton>
+              <Avatar 
+                sx={{ 
+                  bgcolor: 'primary.main',
+                  width: 36,
+                  height: 36,
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+                onClick={handleAvatarClick}
+              >
+                {initial}
+              </Avatar>
+              </>
+            )}
           </Box>
         </Toolbar>
       </AppBar>
