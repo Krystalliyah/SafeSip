@@ -10,6 +10,7 @@ import Dashboard from "./components/Dashboard";
 import TestHistory from "./components/TestHistory";
 import Analytics from "./components/Analytics";
 import Settings from "./components/Settings";
+import { useAuth } from "./components/AuthContext";  
 import "./App.css";
 
 const theme = createTheme({
@@ -66,6 +67,7 @@ const theme = createTheme({
 
 const App = () => {
   const [predictionResult, setPredictionResult] = useState(null);
+  const { currentUser, authLoading } = useAuth();
 
   const handlePrediction = (result) => {
     setPredictionResult(result);
@@ -155,31 +157,67 @@ const App = () => {
     </Container>
   );
 
+  if (authLoading) {
+    // Optional: nicer loading state
+    return (
+      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Typography variant="body1">Checking authentication...</Typography>
+      </Box>
+    );
+  }
+
   return (
     <Router>
       <ThemeProvider theme={theme}>
         <Box sx={{ display: "flex" }}>
           <CssBaseline />
-          <Sidebar />
+
+          {/* ⬇️ Only show Sidebar when logged in */}
+          {currentUser && <Sidebar />}
+
           <Box 
             component="main" 
             sx={{ 
               flexGrow: 1, 
-              ml: { xs: 0, md: '280px' },
+              ml: currentUser ? { xs: 0, md: '280px' } : 0,
               minHeight: '100vh',
               bgcolor: 'background.default',
               position: 'relative',
             }}
           >
-            <Header />
-            <Routes>
-              <Route path="/" element={<PredictionPage />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/history" element={<TestHistory />} />
-              <Route path="/analytics" element={<Analytics />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            {/* Header always shown, but on landing we force auth dialog open */}
+            <Header forceAuthOnStart={!currentUser} />
+
+            {currentUser ? (
+              // ✅ Logged-in routes
+              <Routes>
+                <Route path="/" element={<PredictionPage />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/history" element={<TestHistory />} />
+                <Route path="/analytics" element={<Analytics />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            ) : (
+              // 🚪 Landing "please log in" screen (no routes, no app content)
+              <Box sx={{ 
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 'calc(100vh - 64px)', // minus header height
+                px: 2,
+                textAlign: 'center',
+              }}>
+                <Typography variant="h4" sx={{ mb: 2, fontWeight: 600, color: 'primary.main' }}>
+                  Welcome to SafeSip
+                </Typography>
+                <Typography variant="body1" sx={{ maxWidth: 500, color: 'text.secondary' }}>
+                  Please log in or create an account to use the water potability prediction tools.
+                  The login window should be open above. If it is closed, click the avatar in the header.
+                </Typography>
+              </Box>
+            )}
           </Box>
         </Box>
       </ThemeProvider>
