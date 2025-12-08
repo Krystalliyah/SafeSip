@@ -48,8 +48,39 @@ const ResultsDisplay = ({ result }) => {
     );
   }
 
-  const { potable, confidence, message, details, score } = result;
+  // 🔹 Extract what the backend actually returns
+  const {
+    prediction,             // "Potable" or "Not potable"
+    confidence: rawConf,    // 0–1
+    confidence_percent,     // 0–100 (optional, depending on your API)
+    prob_potable,
+    prob_not_potable,
+    details: apiDetails,
+    score: apiScore,
+  } = result;
+
+  // 🔹 Derive fields the UI expects
+  const potable = prediction === 'Potable';
+
+  // Use rawConf if present; otherwise derive from confidence_percent
+  const confidence = rawConf != null
+    ? rawConf
+    : (confidence_percent != null ? confidence_percent / 100 : 0);
+
   const confidencePercent = Math.round(confidence * 100);
+
+  const message = potable
+    ? 'Water is likely POTABLE'
+    : 'Water is likely NOT POTABLE';
+
+  const details = apiDetails || (
+    potable
+      ? `The model predicts that this water sample is potable with approximately ${confidencePercent}% confidence.`
+      : `The model predicts that this water sample is not potable with approximately ${confidencePercent}% confidence. Further laboratory testing is recommended.`
+  );
+
+  // If backend doesn’t send a score, just use confidence * 100
+  const score = apiScore != null ? apiScore : confidencePercent;
 
   return (
     <Paper sx={{ 
@@ -116,7 +147,7 @@ const ResultsDisplay = ({ result }) => {
       </Typography>
 
       {/* Water Safety Score */}
-      {score && (
+      {score != null && (
         <Box sx={{ mb: 3 }}>
           <Typography variant="body1" sx={{ fontWeight: 600, mb: 1 }}>
             Safety Score: {score}/100
@@ -194,7 +225,7 @@ const ResultsDisplay = ({ result }) => {
 
       {/* Model Info */}
       <Typography variant="caption" color="text.secondary" sx={{ mt: 3, display: 'block', textAlign: 'center' }}>
-        Powered by Random Forest Classifier • Trained on Water Potability Dataset
+        Powered by SVM (RBF kernel) classifier • Trained on Water Potability Dataset
       </Typography>
     </Paper>
   );

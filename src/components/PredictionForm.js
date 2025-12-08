@@ -19,7 +19,6 @@ import {
   Refresh,
   Upload,
 } from '@mui/icons-material';
-import { mockPredict } from './mockPredictor';
 
 const PredictionForm = ({ onPredict }) => {
   const [waterData, setWaterData] = useState({
@@ -60,17 +59,38 @@ const PredictionForm = ({ onPredict }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
+
     try {
-      // Using mock predictor for now - replace with real API later
-      const result = await mockPredict(waterData);
-      onPredict(result);
+      // Send waterData directly; backend maps keys → model columns
+      const response = await fetch('http://127.0.0.1:5000/predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(waterData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('API error:', errorData);
+        alert('Error from API: ' + (errorData.error || response.statusText));
+        return;
+      }
+
+      const result = await response.json();
+
+      // result should look like:
+      // { prediction, prob_potable, prob_not_potable, confidence, confidence_percent }
+
+      onPredict(result);   // parent component will show it
     } catch (error) {
       console.error('Prediction error:', error);
+      alert('Failed to connect to prediction API.');
     } finally {
       setLoading(false);
     }
   };
+
 
   const resetToDefault = () => {
     setWaterData({
