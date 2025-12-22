@@ -1,17 +1,31 @@
 /* App.css */
+
+/* =========================
+   Reset + base layout
+   ========================= */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-body {
-  font-family: 'Montserrat', sans-serif;
-  background: linear-gradient(135deg, #f0f9ff 0%, #e6f7ff 100%);
-  min-height: 100vh;
+html,
+body,
+#root {
+  height: 100%;
 }
 
-/* Custom scrollbar */
+body {
+  font-family: "Montserrat", sans-serif;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e6f7ff 100%);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* =========================
+   Scrollbar styling
+   ========================= */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -31,7 +45,9 @@ body {
   background: #004999;
 }
 
-/* Animation classes */
+/* =========================
+   Animations
+   ========================= */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -47,7 +63,8 @@ body {
   animation: fadeIn 0.5s ease-out;
 }
 
-/* Water wave animation */
+/* Optional water wave background utility class
+   Use on decorative containers only */
 @keyframes waterWave {
   0% {
     background-position: 0% 50%;
@@ -64,4 +81,55 @@ body {
   background: linear-gradient(45deg, #0066cc, #4d94ff, #00a86b, #0066cc);
   background-size: 400% 400%;
   animation: waterWave 15s ease infinite;
+
+  /* IMPORTANT: if applied to a full-screen layer,
+     prevents it from blocking clicks */
+  pointer-events: none;
+}
+
+/* Subtle shine on the SDG badge */
+.water-badge {
+  position: relative;
+  overflow: hidden;
+}
+
+.water-badge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.18),
+    rgba(255, 255, 255, 0)
+  );
+  transform: translateX(-60%);
+  animation: badgeShine 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes badgeShine {
+  0% {
+    transform: translateX(-60%);
+  }
+  55% {
+    transform: translateX(120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+/* =========================
+   Accessibility: Reduce motion
+   ========================= */
+@media (prefers-reduced-motion: reduce) {
+  .fade-in {
+    animation: none !important;
+  }
+  .water-bg {
+    animation: none !important;
+  }
+  .water-badge::after {
+    animation: none !important;
+  }
 }
