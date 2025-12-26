@@ -16,15 +16,18 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  useTheme,
+  alpha,
+  Tooltip,
 } from "@mui/material";
 import {
   TrendingUp,
-  TrendingDown,
   LocalDrink,
   Warning,
   CheckCircle,
-  Cancel,
   LocationOn,
+  CalendarMonth,
+  Science,
 } from "@mui/icons-material";
 
 import { useAuth } from "../components/AuthContext";
@@ -34,7 +37,12 @@ function dayKey(ts) {
   try {
     const d = ts?.toDate?.();
     if (!d) return null;
-    return d.toISOString().slice(0, 10); // YYYY-MM-DD
+    
+    // Use LOCAL date from the timestamp (not UTC)
+    const localYear = d.getFullYear();
+    const localMonth = String(d.getMonth() + 1).padStart(2, '0');
+    const localDay = String(d.getDate()).padStart(2, '0');
+    return `${localYear}-${localMonth}-${localDay}`;
   } catch {
     return null;
   }
@@ -44,7 +52,10 @@ function monthKey(ts) {
   try {
     const d = ts?.toDate?.();
     if (!d) return null;
-    return d.toISOString().slice(0, 7); // YYYY-MM
+    // Use local month
+    const localYear = d.getFullYear();
+    const localMonth = String(d.getMonth() + 1).padStart(2, '0');
+    return `${localYear}-${localMonth}`;
   } catch {
     return null;
   }
@@ -52,8 +63,9 @@ function monthKey(ts) {
 
 export default function AnalyticsPage() {
   const { currentUser } = useAuth();
+  const theme = useTheme();
   const [tests, setTests] = useState([]);
-  const [timeRange, setTimeRange] = useState("all"); // all, month, week
+  const [timeRange, setTimeRange] = useState("all");
 
   useEffect(() => {
     const unsub = subscribeToRecentTests(currentUser?.uid, 1000, setTests, console.error);
@@ -61,15 +73,14 @@ export default function AnalyticsPage() {
   }, [currentUser?.uid]);
 
   const computed = useMemo(() => {
-    // Filter by time range
     const now = new Date();
     let filteredTests = tests;
     
     if (timeRange === "month") {
-      const oneMonthAgo = new Date(now.setMonth(now.getMonth() - 1));
+      const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
       filteredTests = tests.filter(t => t.createdAt?.toDate() > oneMonthAgo);
     } else if (timeRange === "week") {
-      const oneWeekAgo = new Date(now.setDate(now.getDate() - 7));
+      const oneWeekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
       filteredTests = tests.filter(t => t.createdAt?.toDate() > oneWeekAgo);
     }
 
@@ -89,7 +100,7 @@ export default function AnalyticsPage() {
     });
     const sortedIssues = Object.entries(issueCounts)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
+      .slice(0, 6);
 
     // Barangay analysis
     const barangayStats = {};
@@ -111,17 +122,35 @@ export default function AnalyticsPage() {
         potableRate: Math.round((stats.potable / stats.total) * 100)
       }))
       .sort((a, b) => b.total - a.total)
-      .slice(0, 5);
+      .slice(0, 8);
 
-    // Daily activity
+    // Daily activity - last 30 days
     const dailyBuckets = {};
+    const today = new Date();
+    
+    // Initialize last 30 days with 0 counts - use LOCAL date consistently
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      
+      const localYear = date.getFullYear();
+      const localMonth = String(date.getMonth() + 1).padStart(2, '0');
+      const localDay = String(date.getDate()).padStart(2, '0');
+      const key = `${localYear}-${localMonth}-${localDay}`;
+      dailyBuckets[key] = 0;
+    }
+    
+    // Fill in actual counts - dayKey uses LOCAL date
     filteredTests.forEach((t) => {
       const k = dayKey(t.createdAt);
-      if (!k) return;
-      dailyBuckets[k] = (dailyBuckets[k] || 0) + 1;
+      if (k && dailyBuckets.hasOwnProperty(k)) {
+        dailyBuckets[k]++;
+      }
     });
-    const days = Object.keys(dailyBuckets).sort();
-    const last30Days = days.slice(-30).map((d) => ({ day: d, count: dailyBuckets[d] }));
+    
+    const last30Days = Object.keys(dailyBuckets)
+      .sort()
+      .map((d) => ({ day: d, count: dailyBuckets[d] }));
 
     // Monthly trends
     const monthlyBuckets = {};
@@ -141,11 +170,13 @@ export default function AnalyticsPage() {
       const values = filteredTests.map(t => t.inputs?.[param]).filter(v => v != null);
       if (values.length > 0) {
         const avg = values.reduce((a, b) => a + b, 0) / values.length;
-        paramStats[param] = { average: avg, count: values.length };
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        paramStats[param] = { average: avg, count: values.length, min, max };
       }
     });
 
-    const maxDailyCount = last30Days.reduce((m, x) => Math.max(m, x.count), 0) || 1;
+    const maxDailyCount = Math.max(...last30Days.map(x => x.count), 1);
 
     return {
       total,
@@ -163,25 +194,84 @@ export default function AnalyticsPage() {
     };
   }, [tests, timeRange]);
 
+  const StatCard = ({ icon, label, value, subtitle, color = "primary", progress }) => (
+    <Card 
+      sx={{ 
+        height: '100%',
+        background: `linear-gradient(135deg, ${alpha(theme.palette[color].main, 0.1)} 0%, ${alpha(theme.palette[color].main, 0.05)} 100%)`,
+        border: `1px solid ${alpha(theme.palette[color].main, 0.2)}`,
+        borderRadius: 3,
+        transition: 'transform 0.2s, box-shadow 0.2s',
+        '&:hover': {
+          transform: 'translateY(-4px)',
+          boxShadow: theme.shadows[8],
+        }
+      }}
+    >
+      <CardContent>
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" mb={1.5}>
+          <Box>
+            <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, mb: 0.5 }}>
+              {label}
+            </Typography>
+            <Typography variant="h3" sx={{ fontWeight: 800, color: `${color}.main` }}>
+              {value}
+            </Typography>
+            {subtitle && (
+              <Typography variant="caption" sx={{ color: 'text.secondary', mt: 0.5 }}>
+                {subtitle}
+              </Typography>
+            )}
+          </Box>
+          <Box 
+            sx={{ 
+              p: 1.5, 
+              borderRadius: 2, 
+              bgcolor: alpha(theme.palette[color].main, 0.15),
+              color: `${color}.main`
+            }}
+          >
+            {icon}
+          </Box>
+        </Stack>
+        {progress !== undefined && (
+          <LinearProgress 
+            variant="determinate" 
+            value={progress} 
+            sx={{ 
+              height: 6, 
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette[color].main, 0.1),
+              '& .MuiLinearProgress-bar': {
+                borderRadius: 3,
+                bgcolor: `${color}.main`
+              }
+            }} 
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={2} sx={{ mb: 4 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800, mb: 0.5 }}>
+          <Typography variant="h3" sx={{ fontWeight: 900, mb: 1, color: 'primary.main' }}>
             Analytics Dashboard
           </Typography>
-          <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            Insights from your water quality predictions
+          <Typography variant="body1" sx={{ color: "text.secondary" }}>
+            Comprehensive insights from {computed.total} water quality predictions
           </Typography>
         </Box>
         
-        <FormControl sx={{ minWidth: 120 }}>
+        <FormControl sx={{ minWidth: 160 }}>
           <InputLabel>Time Range</InputLabel>
           <Select
             value={timeRange}
             label="Time Range"
             onChange={(e) => setTimeRange(e.target.value)}
-            size="small"
+            sx={{ borderRadius: 2 }}
           >
             <MenuItem value="all">All Time</MenuItem>
             <MenuItem value="month">Last Month</MenuItem>
@@ -191,111 +281,122 @@ export default function AnalyticsPage() {
       </Stack>
 
       {/* Summary Cards */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ borderRadius: 3, height: "100%" }}>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <Box sx={{ bgcolor: "primary.light", p: 1.5, borderRadius: 2 }}>
-                  <LocalDrink sx={{ color: "primary.main" }} />
-                </Box>
-                <Box>
-                  <Typography variant="body2" sx={{ color: "text.secondary" }}>Total Tests</Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 800 }}>{computed.total}</Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={6} lg={3}>
+          <StatCard
+            icon={<LocalDrink sx={{ fontSize: 28 }} />}
+            label="Total Tests"
+            value={computed.total}
+            color="primary"
+          />
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ borderRadius: 3, height: "100%" }}>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <Box sx={{ bgcolor: "success.light", p: 1.5, borderRadius: 2 }}>
-                  <CheckCircle sx={{ color: "success.main" }} />
-                </Box>
-                <Box>
-                  <Typography variant="body2" sx={{ color: "text.secondary" }}>Potable Rate</Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 800 }}>{computed.potableRate}%</Typography>
-                </Box>
-              </Stack>
-              <LinearProgress 
-                variant="determinate" 
-                value={computed.potableRate} 
-                sx={{ mt: 1, height: 6, borderRadius: 3 }}
-              />
-            </CardContent>
-          </Card>
+        <Grid item xs={12} sm={6} lg={3}>
+          <StatCard
+            icon={<CheckCircle sx={{ fontSize: 28 }} />}
+            label="Potable Rate"
+            value={`${computed.potableRate}%`}
+            subtitle={`${computed.potable} of ${computed.total} safe`}
+            color="success"
+            progress={computed.potableRate}
+          />
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ borderRadius: 3, height: "100%" }}>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <Box sx={{ bgcolor: "info.light", p: 1.5, borderRadius: 2 }}>
-                  <TrendingUp sx={{ color: "info.main" }} />
-                </Box>
-                <Box>
-                  <Typography variant="body2" sx={{ color: "text.secondary" }}>Avg Confidence</Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 800 }}>{computed.avgConf}%</Typography>
-                </Box>
-              </Stack>
-              <LinearProgress 
-                variant="determinate" 
-                value={computed.avgConf} 
-                sx={{ mt: 1, height: 6, borderRadius: 3 }}
-              />
-            </CardContent>
-          </Card>
+        <Grid item xs={12} sm={6} lg={3}>
+          <StatCard
+            icon={<TrendingUp sx={{ fontSize: 28 }} />}
+            label="Avg Confidence"
+            value={`${computed.avgConf}%`}
+            subtitle="Model certainty"
+            color="info"
+            progress={computed.avgConf}
+          />
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ borderRadius: 3, height: "100%" }}>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={2}>
-                <Box sx={{ bgcolor: "warning.light", p: 1.5, borderRadius: 2 }}>
-                  <Warning sx={{ color: "warning.main" }} />
-                </Box>
-                <Box>
-                  <Typography variant="body2" sx={{ color: "text.secondary" }}>Issues Found</Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 800 }}>
-                    {computed.filteredTests.filter(t => t.issues?.length > 0).length}
-                  </Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
+        <Grid item xs={12} sm={6} lg={3}>
+          <StatCard
+            icon={<Warning sx={{ fontSize: 28 }} />}
+            label="Tests with Issues"
+            value={computed.filteredTests.filter(t => t.issues?.length > 0).length}
+            subtitle={`${computed.sortedIssues.length} unique issues`}
+            color="warning"
+          />
         </Grid>
       </Grid>
 
       {/* Detailed Analytics Grid */}
       <Grid container spacing={3}>
         {/* Barangay Performance */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, borderRadius: 3, height: "100%" }}>
-            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>
-              <LocationOn sx={{ verticalAlign: "middle", mr: 1 }} />
-              Top Barangays by Tests
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
+        <Grid item xs={12} lg={6}>
+          <Paper 
+            sx={{ 
+              p: 3, 
+              borderRadius: 3, 
+              height: "100%",
+              background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.02)} 0%, white 100%)`,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`
+            }}
+          >
+            <Stack direction="row" spacing={2} alignItems="center" mb={2}>
+              <LocationOn sx={{ fontSize: 28, color: 'primary.main' }} />
+              <Box>
+                <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                  Top Barangays by Tests
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Water quality by location
+                </Typography>
+              </Box>
+            </Stack>
+            <Divider sx={{ mb: 2.5 }} />
             
             {computed.sortedBarangays.length === 0 ? (
-              <Typography variant="body2" sx={{ color: "text.secondary", textAlign: "center", py: 4 }}>
-                No barangay data available
-              </Typography>
+              <Box sx={{ textAlign: 'center', py: 6 }}>
+                <LocationOn sx={{ fontSize: 48, color: alpha(theme.palette.primary.main, 0.3), mb: 2 }} />
+                <Typography variant="body1" sx={{ fontWeight: 600, mb: 1 }}>
+                  No barangay data available
+                </Typography>
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  Start adding barangay information to your tests
+                </Typography>
+              </Box>
             ) : (
-              <Stack spacing={2}>
+              <Stack spacing={2.5}>
                 {computed.sortedBarangays.map((barangay, idx) => (
-                  <Box key={barangay.name}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
-                      <Typography sx={{ fontWeight: 600 }}>{barangay.name}</Typography>
+                  <Paper
+                    key={barangay.name}
+                    elevation={0}
+                    sx={{ 
+                      p: 2, 
+                      bgcolor: alpha(theme.palette.primary.main, 0.03),
+                      border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                      borderRadius: 2,
+                      transition: 'all 0.2s',
+                      '&:hover': {
+                        bgcolor: alpha(theme.palette.primary.main, 0.06),
+                        transform: 'translateX(4px)'
+                      }
+                    }}
+                  >
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
                       <Stack direction="row" spacing={1} alignItems="center">
+                        <Chip 
+                          label={`#${idx + 1}`} 
+                          size="small" 
+                          sx={{ 
+                            fontWeight: 700,
+                            bgcolor: alpha(theme.palette.primary.main, 0.15),
+                            color: 'primary.dark'
+                          }} 
+                        />
+                        <Typography sx={{ fontWeight: 700 }}>{barangay.name}</Typography>
+                      </Stack>
+                      <Stack direction="row" spacing={1.5} alignItems="center">
                         <Chip
-                          label={`${barangay.potableRate}% potable`}
+                          label={`${barangay.potableRate}%`}
                           size="small"
-                          color={barangay.potableRate >= 50 ? "success" : "error"}
-                          variant="outlined"
+                          color={barangay.potableRate >= 70 ? "success" : barangay.potableRate >= 40 ? "warning" : "error"}
+                          sx={{ fontWeight: 700, minWidth: 60 }}
                         />
                         <Typography variant="body2" sx={{ color: "text.secondary" }}>
                           {barangay.total} tests
@@ -305,45 +406,139 @@ export default function AnalyticsPage() {
                     <LinearProgress
                       variant="determinate"
                       value={barangay.potableRate}
-                      sx={{ height: 6, borderRadius: 3 }}
+                      sx={{ 
+                        height: 8, 
+                        borderRadius: 4,
+                        bgcolor: alpha(theme.palette.grey[400], 0.2),
+                        '& .MuiLinearProgress-bar': {
+                          borderRadius: 4,
+                          bgcolor: barangay.potableRate >= 70 ? 'success.main' : barangay.potableRate >= 40 ? 'warning.main' : 'error.main'
+                        }
+                      }}
                     />
-                  </Box>
+                  </Paper>
                 ))}
               </Stack>
+            )}
+            
+            {/* Choropleth Map Suggestion */}
+            {computed.sortedBarangays.length > 0 && (
+              <Box 
+                sx={{ 
+                  mt: 3, 
+                  p: 2, 
+                  bgcolor: alpha(theme.palette.info.main, 0.05),
+                  border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`,
+                  borderRadius: 2 
+                }}
+              >
+                <Typography variant="caption" sx={{ color: 'info.dark', fontWeight: 600, display: 'block', mb: 0.5 }}>
+                  💡 Enhancement Suggestion
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Consider adding a choropleth map showing water quality across Iligan City barangays. 
+                  You'll need GeoJSON data for Iligan City barangays and can use libraries like Leaflet or Mapbox GL JS.
+                </Typography>
+              </Box>
             )}
           </Paper>
         </Grid>
 
         {/* Common Issues */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, borderRadius: 3, height: "100%" }}>
-            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>
-              <Warning sx={{ verticalAlign: "middle", mr: 1 }} />
-              Most Common Issues
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
+        <Grid item xs={12} lg={6}>
+          <Paper 
+            sx={{ 
+              p: 3, 
+              borderRadius: 3, 
+              height: "100%",
+              background: `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.02)} 0%, white 100%)`,
+              border: `1px solid ${alpha(theme.palette.warning.main, 0.1)}`
+            }}
+          >
+            <Stack direction="row" spacing={2} alignItems="center" mb={2}>
+              <Warning sx={{ fontSize: 28, color: 'warning.main' }} />
+              <Box>
+                <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                  Most Common Issues
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Frequent water quality problems
+                </Typography>
+              </Box>
+            </Stack>
+            <Divider sx={{ mb: 2.5 }} />
             
             {computed.sortedIssues.length === 0 ? (
-              <Typography variant="body2" sx={{ color: "text.secondary", textAlign: "center", py: 4 }}>
-                No issues detected in recent tests
-              </Typography>
+              <Box sx={{ textAlign: 'center', py: 6 }}>
+                <CheckCircle sx={{ fontSize: 48, color: alpha(theme.palette.success.main, 0.5), mb: 2 }} />
+                <Typography variant="body1" sx={{ fontWeight: 600, mb: 1 }}>
+                  No issues detected
+                </Typography>
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  All tests are showing good water quality!
+                </Typography>
+              </Box>
             ) : (
-              <Stack spacing={1.5}>
-                {computed.sortedIssues.map(([issue, count]) => (
-                  <Stack key={issue} direction="row" justifyContent="space-between" alignItems="center">
-                    <Typography sx={{ fontWeight: 500 }}>{issue}</Typography>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                        {count} occurrences
-                      </Typography>
-                      <Chip
-                        label={`${Math.round((count / computed.total) * 100)}%`}
-                        size="small"
-                        color="error"
+              <Stack spacing={2}>
+                {computed.sortedIssues.map(([issue, count], idx) => {
+                  const percentage = Math.round((count / computed.total) * 100);
+                  return (
+                    <Paper
+                      key={issue}
+                      elevation={0}
+                      sx={{ 
+                        p: 2, 
+                        bgcolor: alpha(theme.palette.warning.main, 0.05),
+                        border: `1px solid ${alpha(theme.palette.warning.main, 0.2)}`,
+                        borderRadius: 2,
+                        transition: 'all 0.2s',
+                        '&:hover': {
+                          bgcolor: alpha(theme.palette.warning.main, 0.1),
+                          transform: 'translateX(4px)'
+                        }
+                      }}
+                    >
+                      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Chip 
+                            label={`#${idx + 1}`} 
+                            size="small" 
+                            sx={{ 
+                              fontWeight: 700,
+                              bgcolor: alpha(theme.palette.warning.main, 0.2),
+                              color: 'warning.dark'
+                            }} 
+                          />
+                          <Typography sx={{ fontWeight: 700 }}>{issue}</Typography>
+                        </Stack>
+                        <Stack direction="row" spacing={1.5} alignItems="center">
+                          <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                            {count} times
+                          </Typography>
+                          <Chip
+                            label={`${percentage}%`}
+                            size="small"
+                            color="warning"
+                            sx={{ fontWeight: 700, minWidth: 60 }}
+                          />
+                        </Stack>
+                      </Stack>
+                      <LinearProgress
+                        variant="determinate"
+                        value={percentage}
+                        sx={{ 
+                          height: 8, 
+                          borderRadius: 4,
+                          bgcolor: alpha(theme.palette.warning.main, 0.1),
+                          '& .MuiLinearProgress-bar': {
+                            borderRadius: 4,
+                            bgcolor: 'warning.main'
+                          }
+                        }}
                       />
-                    </Stack>
-                  </Stack>
-                ))}
+                    </Paper>
+                  );
+                })}
               </Stack>
             )}
           </Paper>
@@ -351,76 +546,204 @@ export default function AnalyticsPage() {
 
         {/* Daily Activity */}
         <Grid item xs={12}>
-          <Paper sx={{ p: 3, borderRadius: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>
-              Last 30 Days Activity
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
+          <Paper 
+            sx={{ 
+              p: 3, 
+              borderRadius: 3,
+              background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.02)} 0%, white 100%)`,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`
+            }}
+          >
+            <Stack direction="row" spacing={2} alignItems="center" mb={2}>
+              <CalendarMonth sx={{ fontSize: 28, color: 'primary.main' }} />
+              <Box>
+                <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                  Last 30 Days Activity
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Daily test frequency - hover for details
+                </Typography>
+              </Box>
+            </Stack>
+            <Divider sx={{ mb: 3 }} />
             
             {computed.last30Days.length === 0 ? (
-              <Typography variant="body2" sx={{ color: "text.secondary", textAlign: "center", py: 4 }}>
-                No activity in the last 30 days
-              </Typography>
+              <Box sx={{ textAlign: 'center', py: 6 }}>
+                <CalendarMonth sx={{ fontSize: 48, color: alpha(theme.palette.primary.main, 0.3), mb: 2 }} />
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  No activity in the last 30 days
+                </Typography>
+              </Box>
             ) : (
-              <Grid container spacing={0.5}>
-                {computed.last30Days.map((day) => {
-                  const height = Math.max(20, (day.count / computed.maxDailyCount) * 100);
-                  return (
-                    <Grid item xs={12 / 30} key={day.day}>
-                      <Stack alignItems="center" spacing={0.5}>
-                        <Box
-                          sx={{
-                            width: "80%",
-                            height: `${height}px`,
-                            bgcolor: "primary.main",
-                            borderRadius: 1,
-                            transition: "all 0.3s ease",
-                            '&:hover': {
-                              bgcolor: "primary.dark",
-                            }
+              <Box sx={{ overflowX: 'auto', pb: 2 }}>
+                <Stack direction="row" spacing={0.5} sx={{ minWidth: 'max-content' }}>
+                  {computed.last30Days.map((day) => {
+                    const height = Math.max(30, (day.count / computed.maxDailyCount) * 120);
+                    const date = new Date(day.day + 'T00:00:00'); // Add time to parse correctly
+                    
+                    // Get today's date string using the same logic as dayKey
+                    const today = new Date();
+                    const todayYear = today.getFullYear();
+                    const todayMonth = String(today.getMonth() + 1).padStart(2, '0');
+                    const todayDay = String(today.getDate()).padStart(2, '0');
+                    const todayStr = `${todayYear}-${todayMonth}-${todayDay}`;
+                    
+                    const isToday = day.day === todayStr;
+                    
+                    return (
+                      <Tooltip 
+                        key={day.day} 
+                        title={
+                          <Box>
+                            <Typography variant="caption" sx={{ fontWeight: 600, display: 'block' }}>
+                              {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </Typography>
+                            <Typography variant="caption">
+                              {day.count} {day.count === 1 ? 'test' : 'tests'}
+                            </Typography>
+                          </Box>
+                        }
+                        arrow
+                      >
+                        <Stack 
+                          alignItems="center" 
+                          spacing={0.5} 
+                          sx={{ 
+                            minWidth: 28,
+                            cursor: 'pointer'
                           }}
-                        />
-                        <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                          {new Date(day.day).getDate()}
-                        </Typography>
-                        {day.count > 0 && (
-                          <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                            {day.count}
+                        >
+                          <Box
+                            sx={{
+                              width: 20,
+                              height: `${height}px`,
+                              bgcolor: day.count === 0 
+                                ? alpha(theme.palette.grey[400], 0.2)
+                                : isToday 
+                                  ? 'secondary.main'
+                                  : 'primary.main',
+                              borderRadius: 1,
+                              transition: 'all 0.2s ease',
+                              border: isToday ? `2px solid ${theme.palette.secondary.dark}` : 'none',
+                              '&:hover': {
+                                bgcolor: day.count === 0 
+                                  ? alpha(theme.palette.grey[400], 0.3)
+                                  : isToday 
+                                    ? 'secondary.dark'
+                                    : 'primary.dark',
+                                transform: 'scaleY(1.05)',
+                              }
+                            }}
+                          />
+                          <Typography 
+                            variant="caption" 
+                            sx={{ 
+                              color: "text.secondary",
+                              fontSize: '10px',
+                              fontWeight: isToday ? 700 : 400
+                            }}
+                          >
+                            {date.getDate()}
                           </Typography>
-                        )}
-                      </Stack>
-                    </Grid>
-                  );
-                })}
-              </Grid>
+                        </Stack>
+                      </Tooltip>
+                    );
+                  })}
+                </Stack>
+                <Stack direction="row" spacing={3} sx={{ mt: 2, justifyContent: 'center' }}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box sx={{ width: 12, height: 12, bgcolor: 'primary.main', borderRadius: 0.5 }} />
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>Past days</Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box sx={{ width: 12, height: 12, bgcolor: 'secondary.main', borderRadius: 0.5, border: `2px solid ${theme.palette.secondary.dark}` }} />
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>Today</Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Box sx={{ width: 12, height: 12, bgcolor: alpha(theme.palette.grey[400], 0.2), borderRadius: 0.5 }} />
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>No tests</Typography>
+                  </Stack>
+                </Stack>
+              </Box>
             )}
           </Paper>
         </Grid>
 
         {/* Parameter Averages */}
         <Grid item xs={12}>
-          <Paper sx={{ p: 3, borderRadius: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>
-              Average Parameter Values
-            </Typography>
-            <Divider sx={{ mb: 2 }} />
+          <Paper 
+            sx={{ 
+              p: 3, 
+              borderRadius: 3,
+              background: `linear-gradient(135deg, ${alpha(theme.palette.info.main, 0.02)} 0%, white 100%)`,
+              border: `1px solid ${alpha(theme.palette.info.main, 0.1)}`
+            }}
+          >
+            <Stack direction="row" spacing={2} alignItems="center" mb={2}>
+              <Science sx={{ fontSize: 28, color: 'info.main' }} />
+              <Box>
+                <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                  Average Parameter Values
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Statistical overview of water quality metrics
+                </Typography>
+              </Box>
+            </Stack>
+            <Divider sx={{ mb: 3 }} />
             
             {Object.keys(computed.paramStats).length === 0 ? (
-              <Typography variant="body2" sx={{ color: "text.secondary", textAlign: "center", py: 4 }}>
-                No parameter data available
-              </Typography>
+              <Box sx={{ textAlign: 'center', py: 6 }}>
+                <Science sx={{ fontSize: 48, color: alpha(theme.palette.info.main, 0.3), mb: 2 }} />
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  No parameter data available
+                </Typography>
+              </Box>
             ) : (
               <Grid container spacing={2}>
                 {Object.entries(computed.paramStats).map(([param, stats]) => (
                   <Grid item xs={12} sm={6} md={4} lg={3} key={param}>
-                    <Card variant="outlined" sx={{ borderRadius: 2 }}>
+                    <Card 
+                      sx={{ 
+                        borderRadius: 2,
+                        border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`,
+                        transition: 'all 0.2s',
+                        '&:hover': {
+                          borderColor: theme.palette.info.main,
+                          transform: 'translateY(-2px)',
+                          boxShadow: theme.shadows[4]
+                        }
+                      }}
+                    >
                       <CardContent>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, textTransform: "capitalize" }}>
+                        <Typography 
+                          variant="subtitle2" 
+                          sx={{ 
+                            fontWeight: 700, 
+                            mb: 1.5, 
+                            textTransform: "capitalize",
+                            color: 'info.dark'
+                          }}
+                        >
                           {param.replace('_', ' ')}
                         </Typography>
-                        <Typography variant="h5" sx={{ fontWeight: 800, color: "primary.main" }}>
+                        <Typography variant="h4" sx={{ fontWeight: 800, color: "info.main", mb: 0.5 }}>
                           {stats.average.toFixed(2)}
                         </Typography>
+                        <Stack direction="row" spacing={1} mb={1}>
+                          <Chip 
+                            label={`Min: ${stats.min.toFixed(2)}`}
+                            size="small"
+                            variant="outlined"
+                            sx={{ fontSize: '10px' }}
+                          />
+                          <Chip 
+                            label={`Max: ${stats.max.toFixed(2)}`}
+                            size="small"
+                            variant="outlined"
+                            sx={{ fontSize: '10px' }}
+                          />
+                        </Stack>
                         <Typography variant="caption" sx={{ color: "text.secondary" }}>
                           from {stats.count} tests
                         </Typography>
@@ -436,33 +759,56 @@ export default function AnalyticsPage() {
         {/* Monthly Trends */}
         {computed.monthlyData.length > 1 && (
           <Grid item xs={12}>
-            <Paper sx={{ p: 3, borderRadius: 3 }}>
+            <Paper 
+              sx={{ 
+                p: 3, 
+                borderRadius: 3,
+                background: `linear-gradient(135deg, ${alpha(theme.palette.secondary.main, 0.02)} 0%, white 100%)`,
+                border: `1px solid ${alpha(theme.palette.secondary.main, 0.1)}`
+              }}
+            >
               <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>
                 Monthly Trends
               </Typography>
-              <Divider sx={{ mb: 2 }} />
-              <Grid container spacing={1}>
-                {computed.monthlyData.map((monthData, idx) => (
-                  <Grid item xs={12 / computed.monthlyData.length} key={monthData.month}>
-                    <Stack alignItems="center">
-                      <Typography variant="caption" sx={{ color: "text.secondary", mb: 0.5 }}>
-                        {new Date(monthData.month).toLocaleDateString('en-US', { month: 'short' })}
-                      </Typography>
-                      <Box
-                        sx={{
-                          width: "60%",
-                          height: `${(monthData.count / Math.max(...computed.monthlyData.map(m => m.count))) * 80}px`,
-                          bgcolor: "secondary.main",
-                          borderRadius: 1,
-                        }}
-                      />
-                      <Typography variant="caption" sx={{ mt: 0.5, fontWeight: 600 }}>
-                        {monthData.count}
+              <Divider sx={{ mb: 3 }} />
+              <Stack direction="row" spacing={2} sx={{ overflowX: 'auto', pb: 2 }}>
+                {computed.monthlyData.map((monthData) => {
+                  const maxCount = Math.max(...computed.monthlyData.map(m => m.count));
+                  const height = (monthData.count / maxCount) * 100;
+                  
+                  return (
+                    <Stack key={monthData.month} alignItems="center" sx={{ minWidth: 80 }}>
+                      <Tooltip title={`${monthData.count} tests`} arrow>
+                        <Box
+                          sx={{
+                            width: 60,
+                            height: `${height}px`,
+                            minHeight: 40,
+                            bgcolor: "secondary.main",
+                            borderRadius: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.2s',
+                            cursor: 'pointer',
+                            '&:hover': {
+                              bgcolor: 'secondary.dark',
+                              transform: 'scaleY(1.05)'
+                            }
+                          }}
+                        >
+                          <Typography variant="body2" sx={{ color: 'white', fontWeight: 700 }}>
+                            {monthData.count}
+                          </Typography>
+                        </Box>
+                      </Tooltip>
+                      <Typography variant="caption" sx={{ mt: 1, color: "text.secondary", fontWeight: 600 }}>
+                        {new Date(monthData.month + '-01').toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
                       </Typography>
                     </Stack>
-                  </Grid>
-                ))}
-              </Grid>
+                  );
+                })}
+              </Stack>
             </Paper>
           </Grid>
         )}

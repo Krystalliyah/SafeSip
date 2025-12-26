@@ -279,7 +279,7 @@ export default function PredictionPage() {
         <Typography variant="h4" sx={{ fontWeight: 800, mr: 1 }}>
           Water Potability Prediction
         </Typography>
-        <Chip label="ML Powered" variant="outlined" />
+       
       </Stack>
 
       <Grid container spacing={3}>
@@ -544,41 +544,6 @@ export default function PredictionPage() {
                 ))}
               </Grid>
             )}
-          </Paper>
-        </Grid>
-
-        {/* Right Sidebar - Empty for now, can add info/tips later */}
-        <Grid item xs={12} lg={4}>
-          <Paper sx={{ p: 3, borderRadius: 3, position: { lg: "sticky" }, top: 20 }}>
-            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>
-              💡 Tips
-            </Typography>
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  Import CSV
-                </Typography>
-                <Typography variant="body2" sx={{ color: "text.secondary", fontSize: "0.875rem" }}>
-                  Upload a CSV file with your water test data for quick input.
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  Ideal Values
-                </Typography>
-                <Typography variant="body2" sx={{ color: "text.secondary", fontSize: "0.875rem" }}>
-                  Each parameter shows its ideal range. Values outside these ranges may indicate water quality issues.
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  Barangay Required
-                </Typography>
-                <Typography variant="body2" sx={{ color: "text.secondary", fontSize: "0.875rem" }}>
-                  Select your barangay to help track water quality across Iligan City.
-                </Typography>
-              </Box>
-            </Stack>
           </Paper>
         </Grid>
       </Grid>

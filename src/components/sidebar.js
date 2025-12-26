@@ -7,6 +7,8 @@ import {
   ListItemText, 
   Divider,
   Typography,
+  Tooltip,
+  Chip,
 } from "@mui/material";
 import {
   Dashboard,
@@ -15,6 +17,7 @@ import {
   Analytics,
   Settings,
   WaterDrop,
+  InfoOutlined,
 } from "@mui/icons-material";
 import { Link, useLocation } from "react-router-dom";
 
@@ -106,11 +109,62 @@ const Sidebar = () => {
           border: '1px solid',
           borderColor: 'primary.100',
         }}>
-          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 0.5 }}>
-            SDG 6 Progress
-          </Typography>
-          <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>
-            89% of targets on track
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
+            <InfoOutlined sx={{ fontSize: 16, color: 'primary.main', mt: 0.25, mr: 1 }} />
+            <Typography variant="caption" sx={{ color: 'text.secondary', flex: 1 }}>
+              <strong>Model Disclaimer:</strong> Predictions based on trained AI model
+            </Typography>
+          </Box>
+          
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1 }}>
+            <Tooltip title="62% overall accuracy" arrow>
+              <Chip 
+                label="Accuracy: 62%" 
+                size="small" 
+                sx={{ 
+                  fontSize: '10px',
+                  height: 20,
+                  bgcolor: 'primary.100',
+                  color: 'primary.dark'
+                }} 
+              />
+            </Tooltip>
+            
+            <Tooltip title="Potable water precision" arrow>
+              <Chip 
+                label="Potable: 68%" 
+                size="small" 
+                sx={{ 
+                  fontSize: '10px',
+                  height: 20,
+                  bgcolor: 'success.100',
+                  color: 'success.dark'
+                }} 
+              />
+            </Tooltip>
+            
+            <Tooltip title="Non-potable water precision" arrow>
+              <Chip 
+                label="Not Potable: 51%" 
+                size="small" 
+                sx={{ 
+                  fontSize: '10px',
+                  height: 20,
+                  bgcolor: 'warning.100',
+                  color: 'warning.dark'
+                }} 
+              />
+            </Tooltip>
+          </Box>
+          
+          <Typography variant="caption" sx={{ 
+            color: 'text.secondary', 
+            fontStyle: 'italic',
+            display: 'block',
+            fontSize: '9px',
+            lineHeight: 1.2
+          }}>
+            Trained on water quality dataset with 656 test samples
           </Typography>
         </Box>
       </Box>

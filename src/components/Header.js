@@ -121,9 +121,6 @@ const Header = ({ forceAuthOnStart = false }) => {
             {currentUser && (
               <>
               <IconButton sx={{ color: 'text.secondary' }}>
-                <Badge badgeContent={2} color="error" size="small">
-                  <Notifications />
-                </Badge>
               </IconButton>
               <Avatar 
                 sx={{ 
